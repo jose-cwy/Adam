@@ -12,11 +12,16 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isVoiceLanding, setIsVoiceLanding] = useState(true);
+  const [queuedVoiceMessage, setQueuedVoiceMessage] = useState('');
   const recognitionRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const micStreamRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const inputRef = useRef('');
+  const pendingVoiceMessageRef = useRef('');
+  const autoSendOnStopRef = useRef(false);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId) || null,
@@ -43,6 +48,10 @@ export default function App() {
   useEffect(() => {
     loadConversations().catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
 
   async function startVoiceMeter() {
     if (analyserRef.current) {
@@ -121,10 +130,19 @@ export default function App() {
     recognition.onend = async () => {
       setIsListening(false);
       await stopVoiceMeter();
+      const shouldAutoSend = autoSendOnStopRef.current;
+      autoSendOnStopRef.current = false;
+      const voiceMessage = (pendingVoiceMessageRef.current || inputRef.current).trim();
+      pendingVoiceMessageRef.current = '';
+
+      if (shouldAutoSend && voiceMessage) {
+        setQueuedVoiceMessage(voiceMessage);
+      }
     };
 
     recognition.onerror = async (event) => {
       setIsListening(false);
+      autoSendOnStopRef.current = false;
       await stopVoiceMeter();
       if (event.error === 'not-allowed') {
         setError('Microphone permission denied. Allow mic access to use voice input.');
@@ -141,6 +159,7 @@ export default function App() {
         .join(' ')
         .trim();
       if (transcript) {
+        pendingVoiceMessageRef.current = transcript;
         setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
       }
     };
@@ -159,21 +178,52 @@ export default function App() {
     loadMessages(activeConversationId).catch((e) => setError(e.message));
   }, [activeConversationId]);
 
+  useEffect(() => {
+    if (!queuedVoiceMessage) {
+      return;
+    }
+    sendMessage(queuedVoiceMessage, { switchToChat: true }).finally(() => {
+      setQueuedVoiceMessage('');
+    });
+  }, [queuedVoiceMessage]);
+
   async function handleNewConversation() {
     const { conversation } = await api.createConversation('New Chat');
     setConversations((prev) => [conversation, ...prev]);
     setActiveConversationId(conversation.id);
     setMessages([]);
+    setIsVoiceLanding(true);
   }
 
-  async function handleSend(e) {
-    e.preventDefault();
-    if (!input.trim()) {
+  async function handleDeleteConversation(conversationId) {
+    try {
+      await api.deleteConversation(conversationId);
+      setConversations((prev) => {
+        const next = prev.filter((c) => c.id !== conversationId);
+        if (activeConversationId === conversationId) {
+          const nextActive = next[0]?.id || null;
+          setActiveConversationId(nextActive);
+          if (!nextActive) {
+            setMessages([]);
+            setIsVoiceLanding(true);
+          }
+        }
+        return next;
+      });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function sendMessage(messageText, options = {}) {
+    const { switchToChat = false } = options;
+    const userMessage = messageText.trim();
+    if (!userMessage || isSending) {
       return;
     }
 
-    const userMessage = input.trim();
     setInput('');
+    inputRef.current = '';
     setIsSending(true);
     setError('');
 
@@ -195,11 +245,19 @@ export default function App() {
       ]);
 
       await loadConversations();
+      if (switchToChat) {
+        setIsVoiceLanding(false);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function handleSend(e) {
+    e.preventDefault();
+    await sendMessage(input, { switchToChat: true });
   }
 
   function handleVoiceToggle() {
@@ -208,10 +266,13 @@ export default function App() {
       return;
     }
     if (isListening) {
+      autoSendOnStopRef.current = true;
       recognitionRef.current.stop();
       return;
     }
     try {
+      pendingVoiceMessageRef.current = '';
+      autoSendOnStopRef.current = true;
       recognitionRef.current.start();
     } catch (_err) {
       setError('Voice recognition is already active.');
@@ -225,28 +286,52 @@ export default function App() {
         activeConversationId={activeConversationId}
         onSelect={setActiveConversationId}
         onNew={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
 
-      <section className="panel chat">
-        <div className="voice-stage">
-          <div className="chat-header">
-            <p className="eyebrow">Adam Voice</p>
-            <h1>{activeConversation?.title || 'Adam'}</h1>
-            <p className="muted">Tap the orb and speak naturally.</p>
-          </div>
-          <button
-            type="button"
-            className={`voice-orb ${isListening ? 'listening' : ''}`}
-            style={{ '--level': voiceLevel }}
-            onClick={handleVoiceToggle}
-            disabled={!speechSupported}
-            aria-label={isListening ? 'Stop voice recognition' : 'Start voice recognition'}
-          >
-            <span className="orb-core">{isListening ? 'Stop' : 'Speak'}</span>
-            <span className="orb-ring orb-ring-a" />
-            <span className="orb-ring orb-ring-b" />
-            <span className="orb-ring orb-ring-c" />
-          </button>
+      <section className={`panel chat ${isVoiceLanding ? 'voice-layout' : 'chat-layout'}`}>
+        <div className={isVoiceLanding ? 'voice-stage' : 'chat-view'}>
+          {isVoiceLanding ? (
+            <>
+              <div className="chat-header">
+                <p className="eyebrow">Adam Voice</p>
+                <h1>{activeConversation?.title || 'Adam'}</h1>
+                <p className="muted">Tap the orb and speak naturally.</p>
+              </div>
+              <button
+                type="button"
+                className={`voice-orb ${isListening ? 'listening' : ''}`}
+                style={{ '--level': voiceLevel }}
+                onClick={handleVoiceToggle}
+                disabled={!speechSupported}
+                aria-label={isListening ? 'Stop voice recognition' : 'Start voice recognition'}
+              >
+                <span className="orb-core">{isListening ? 'Stop' : 'Speak'}</span>
+                <span className="orb-ring orb-ring-a" />
+                <span className="orb-ring orb-ring-b" />
+                <span className="orb-ring orb-ring-c" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="chat-view-header">
+                <h1>Adam</h1>
+                <p className="muted">How can I help you today?</p>
+              </div>
+              <div className="messages">
+                {messages.length === 0 ? (
+                  <p className="muted">Start a conversation.</p>
+                ) : (
+                  messages.map((msg) => (
+                    <article key={msg.id} className={`message ${msg.role}`}>
+                      <h3>{msg.role === 'assistant' ? 'Adam' : 'You'}</h3>
+                      <p>{msg.content}</p>
+                    </article>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <form className="composer" onSubmit={handleSend}>

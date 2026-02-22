@@ -58,3 +58,25 @@ conversationsRouter.get('/:id/messages', async (req, res, next) => {
     next(err);
   }
 });
+
+conversationsRouter.delete('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `DELETE FROM conversations
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});

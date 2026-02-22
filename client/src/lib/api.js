@@ -29,6 +29,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ title })
     }),
+  deleteConversation: (id) =>
+    request(`/api/conversations/${id}`, {
+      method: 'DELETE'
+    }),
   getMessages: (conversationId) => request(`/api/conversations/${conversationId}/messages`),
   sendChat: (body) =>
     request('/api/chat', {
