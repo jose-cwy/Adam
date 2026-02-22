@@ -1,0 +1,183 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #f3f5f7;
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(160deg, #edf2f7 0%, #f8fafc 100%);
+}
+
+.layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  gap: 16px;
+  padding: 16px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.sidebar,
+.memory {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.space-between {
+  justify-content: space-between;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.list-item {
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.list-item.active {
+  border-color: #0f766e;
+  background: #ecfeff;
+}
+
+.messages {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.message {
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid #dbe2ea;
+}
+
+.message.user {
+  background: #f8fafc;
+}
+
+.message.assistant {
+  background: #ecfeff;
+  border-color: #99f6e4;
+}
+
+.message h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.composer {
+  display: block;
+}
+
+.composer-input {
+  display: grid;
+  gap: 8px;
+}
+
+.composer-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.voice-btn.listening {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+textarea,
+input,
+button {
+  font: inherit;
+}
+
+textarea,
+input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+button {
+  border: 1px solid #0f766e;
+  color: #0f766e;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f0fdfa;
+}
+
+.memory-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.memory-item {
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.error {
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+@media (max-width: 1080px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
