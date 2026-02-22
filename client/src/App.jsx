@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './lib/api';
 import { ConversationList } from './components/ConversationList';
-import { MemoryPanel } from './components/MemoryPanel';
 
 export default function App() {
   const [conversations, setConversations] = useState([]);
@@ -10,10 +9,14 @@ export default function App() {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
-  const [memories, setMemories] = useState([]);
   const [isListening, setIsListening] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const micStreamRef = useRef(null);
+  const animationFrameRef = useRef(null);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId) || null,
@@ -37,15 +40,61 @@ export default function App() {
     setMessages(data.messages);
   }
 
-  async function loadMemories() {
-    const data = await api.listMemories();
-    setMemories(data.memories);
-  }
-
   useEffect(() => {
     loadConversations().catch((e) => setError(e.message));
-    loadMemories().catch((e) => setError(e.message));
   }, []);
+
+  async function startVoiceMeter() {
+    if (analyserRef.current) {
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStreamRef.current = stream;
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioCtx();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    const sample = () => {
+      analyser.getByteFrequencyData(data);
+      const sum = data.reduce((acc, value) => acc + value, 0);
+      const average = sum / data.length || 0;
+      const normalized = Math.min(1, average / 75);
+      setVoiceLevel(normalized);
+      animationFrameRef.current = requestAnimationFrame(sample);
+    };
+    sample();
+  }
+
+  async function stopVoiceMeter() {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setVoiceLevel(0);
+
+    if (analyserRef.current) {
+      analyserRef.current.disconnect();
+      analyserRef.current = null;
+    }
+
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      await audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+  }
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -59,17 +108,24 @@ export default function App() {
     recognition.interimResults = false;
     recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
+    recognition.onstart = async () => {
       setIsListening(true);
       setError('');
+      try {
+        await startVoiceMeter();
+      } catch (_err) {
+        setError('Microphone access failed. Check browser permissions.');
+      }
     };
 
-    recognition.onend = () => {
+    recognition.onend = async () => {
       setIsListening(false);
+      await stopVoiceMeter();
     };
 
-    recognition.onerror = (event) => {
+    recognition.onerror = async (event) => {
       setIsListening(false);
+      await stopVoiceMeter();
       if (event.error === 'not-allowed') {
         setError('Microphone permission denied. Allow mic access to use voice input.');
         return;
@@ -95,6 +151,7 @@ export default function App() {
     return () => {
       recognition.stop();
       recognitionRef.current = null;
+      stopVoiceMeter();
     };
   }, []);
 
@@ -145,16 +202,6 @@ export default function App() {
     }
   }
 
-  async function handleCreateMemory(memory) {
-    await api.createMemory(memory);
-    await loadMemories();
-  }
-
-  async function handleDeleteMemory(id) {
-    await api.deleteMemory(id);
-    await loadMemories();
-  }
-
   function handleVoiceToggle() {
     if (!recognitionRef.current) {
       setError('Voice recognition is not supported in this browser.');
@@ -164,7 +211,11 @@ export default function App() {
       recognitionRef.current.stop();
       return;
     }
-    recognitionRef.current.start();
+    try {
+      recognitionRef.current.start();
+    } catch (_err) {
+      setError('Voice recognition is already active.');
+    }
   }
 
   return (
@@ -177,54 +228,62 @@ export default function App() {
       />
 
       <section className="panel chat">
-        <div className="chat-header">
-          <h1>{activeConversation?.title || 'Adam'}</h1>
-        </div>
-
-        <div className="messages">
-          {messages.length === 0 ? (
-            <p className="muted">Start a conversation.</p>
-          ) : (
-            messages.map((msg) => (
-              <article key={msg.id} className={`message ${msg.role}`}>
-                <h3>{msg.role === 'assistant' ? 'Adam' : 'You'}</h3>
-                <p>{msg.content}</p>
-              </article>
-            ))
-          )}
+        <div className="voice-stage">
+          <div className="chat-header">
+            <p className="eyebrow">Adam Voice</p>
+            <h1>{activeConversation?.title || 'Adam'}</h1>
+            <p className="muted">Tap the orb and speak naturally.</p>
+          </div>
+          <button
+            type="button"
+            className={`voice-orb ${isListening ? 'listening' : ''}`}
+            style={{ '--level': voiceLevel }}
+            onClick={handleVoiceToggle}
+            disabled={!speechSupported}
+            aria-label={isListening ? 'Stop voice recognition' : 'Start voice recognition'}
+          >
+            <span className="orb-core">{isListening ? 'Stop' : 'Speak'}</span>
+            <span className="orb-ring orb-ring-a" />
+            <span className="orb-ring orb-ring-b" />
+            <span className="orb-ring orb-ring-c" />
+          </button>
         </div>
 
         <form className="composer" onSubmit={handleSend}>
-          <div className="composer-input">
+          <div className="composer-bar">
+            <button type="button" className="icon-btn plus-btn" aria-label="Add attachment">
+              +
+            </button>
             <textarea
-              rows={3}
+              rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Send a message..."
+              placeholder="Ask anything"
             />
-            <div className="composer-actions">
+            <div className="composer-trailing">
               <button
                 type="button"
-                className={`voice-btn ${isListening ? 'listening' : ''}`}
+                className={`icon-btn mic-btn ${isListening ? 'active' : ''}`}
                 onClick={handleVoiceToggle}
                 disabled={!speechSupported}
+                aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
               >
-                {isListening ? 'Stop Listening' : 'Voice Input'}
+                <span aria-hidden>🎙</span>
               </button>
-              <button disabled={isSending}>{isSending ? 'Thinking...' : 'Send'}</button>
+              <button className="send-btn" disabled={isSending} aria-label="Send message">
+                <span aria-hidden>{isSending ? '…' : '↑'}</span>
+              </button>
             </div>
           </div>
         </form>
         {speechSupported ? (
-          <p className="muted">{isListening ? 'Listening...' : 'Voice input is ready.'}</p>
+          <p className="muted">{isListening ? 'Listening now...' : 'Voice input is ready.'}</p>
         ) : (
           <p className="muted">Voice input is not available in this browser.</p>
         )}
 
         {error ? <p className="error">{error}</p> : null}
       </section>
-
-      <MemoryPanel memories={memories} onCreate={handleCreateMemory} onDelete={handleDeleteMemory} />
     </main>
   );
 }

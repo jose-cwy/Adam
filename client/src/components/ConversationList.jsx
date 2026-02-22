@@ -3,9 +3,11 @@ import React from 'react';
 export function ConversationList({ conversations, activeConversationId, onSelect, onNew }) {
   return (
     <aside className="panel sidebar">
-      <div className="row space-between">
-        <h2>Chats</h2>
-        <button onClick={onNew}>New</button>
+      <div className="sidebar-header">
+        <button className="new-chat-btn" onClick={onNew}>
+          + New Chat
+        </button>
+        <h2>History</h2>
       </div>
       <div className="list">
         {conversations.length === 0 ? (
