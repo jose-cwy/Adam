@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
+import { getDatabaseConfig } from './config.js';
 
 dotenv.config();
 
@@ -14,12 +15,7 @@ async function main() {
     throw new Error('DATABASE_URL is required');
   }
 
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes('sslmode=require')
-      ? { rejectUnauthorized: false }
-      : undefined
-  });
+  const pool = new Pool(getDatabaseConfig(process.env.DATABASE_URL));
 
   const sqlPath = path.resolve(__dirname, '../../sql/001_init.sql');
   const sql = await fs.readFile(sqlPath, 'utf8');

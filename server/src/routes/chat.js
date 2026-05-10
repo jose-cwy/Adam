@@ -2,13 +2,22 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { pool } from '../db/pool.js';
-import { buildSystemPrompt, createAssistantResponse } from '../services/aiService.js';
+import {
+  buildSystemPrompt,
+  createAssistantResponse,
+  transcribeVoiceInput
+} from '../services/aiService.js';
 
 export const chatRouter = Router();
 
 const chatSchema = z.object({
   conversationId: z.string().uuid().optional(),
   message: z.string().min(1).max(8000)
+});
+
+const transcribeSchema = z.object({
+  audioBase64: z.string().min(1),
+  mimeType: z.string().min(1).max(120).optional()
 });
 
 async function getTopMemories(limit = 20) {
@@ -22,6 +31,17 @@ async function getTopMemories(limit = 20) {
 
   return result.rows;
 }
+
+chatRouter.post('/transcribe', async (req, res, next) => {
+  try {
+    const parsed = transcribeSchema.parse(req.body);
+    const transcript = await transcribeVoiceInput(parsed);
+
+    res.json({ transcript });
+  } catch (err) {
+    next(err);
+  }
+});
 
 chatRouter.post('/', async (req, res, next) => {
   try {

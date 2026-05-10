@@ -39,6 +39,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body)
     }),
+  transcribeAudio: (body) =>
+    request('/api/chat/transcribe', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
   listMemories: () => request('/api/memory'),
   createMemory: (body) =>
     request('/api/memory', {

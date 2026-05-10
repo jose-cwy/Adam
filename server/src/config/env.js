@@ -15,6 +15,7 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL || '',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  openaiTranscribeModel: process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-transcribe',
   assistantName: process.env.ASSISTANT_NAME || 'Adam',
   assistantStyle:
     process.env.ASSISTANT_STYLE || 'Direct, pragmatic, organized, and concise'
